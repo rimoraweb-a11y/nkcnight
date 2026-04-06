@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, menuItems, reservations, reviews, operatingHours, InsertMenuItem, InsertReservation, InsertReview, InsertOperatingHour } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,164 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ===== MENU QUERIES =====
+export async function getMenuItems(category?: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    const query = category
+      ? db.select().from(menuItems).where(and(eq(menuItems.category, category), eq(menuItems.isAvailable, 1)))
+      : db.select().from(menuItems).where(eq(menuItems.isAvailable, 1));
+    return await query;
+  } catch (error) {
+    console.error("[Database] Failed to get menu items:", error);
+    return [];
+  }
+}
+
+export async function createMenuItem(item: InsertMenuItem) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const result = await db.insert(menuItems).values(item);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to create menu item:", error);
+    throw error;
+  }
+}
+
+export async function updateMenuItem(id: number, item: Partial<InsertMenuItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db.update(menuItems).set(item).where(eq(menuItems.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update menu item:", error);
+    throw error;
+  }
+}
+
+// ===== RESERVATION QUERIES =====
+export async function getReservations(status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    const query = status
+      ? db.select().from(reservations).where(eq(reservations.status, status as any))
+      : db.select().from(reservations);
+    return await query.orderBy(desc(reservations.createdAt));
+  } catch (error) {
+    console.error("[Database] Failed to get reservations:", error);
+    return [];
+  }
+}
+
+export async function createReservation(reservation: InsertReservation) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const result = await db.insert(reservations).values(reservation);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to create reservation:", error);
+    throw error;
+  }
+}
+
+export async function updateReservationStatus(id: number, status: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db.update(reservations).set({ status: status as any }).where(eq(reservations.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to update reservation:", error);
+    throw error;
+  }
+}
+
+// ===== REVIEW QUERIES =====
+export async function getApprovedReviews() {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    return await db.select().from(reviews).where(eq(reviews.isApproved, 1)).orderBy(desc(reviews.createdAt));
+  } catch (error) {
+    console.error("[Database] Failed to get reviews:", error);
+    return [];
+  }
+}
+
+export async function getPendingReviews() {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    return await db.select().from(reviews).where(eq(reviews.isApproved, 0)).orderBy(desc(reviews.createdAt));
+  } catch (error) {
+    console.error("[Database] Failed to get pending reviews:", error);
+    return [];
+  }
+}
+
+export async function createReview(review: InsertReview) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const result = await db.insert(reviews).values(review);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to create review:", error);
+    throw error;
+  }
+}
+
+export async function approveReview(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    await db.update(reviews).set({ isApproved: 1 }).where(eq(reviews.id, id));
+  } catch (error) {
+    console.error("[Database] Failed to approve review:", error);
+    throw error;
+  }
+}
+
+// ===== OPERATING HOURS QUERIES =====
+export async function getOperatingHours() {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    return await db.select().from(operatingHours).orderBy(operatingHours.dayOfWeek);
+  } catch (error) {
+    console.error("[Database] Failed to get operating hours:", error);
+    return [];
+  }
+}
+
+export async function updateOperatingHours(dayOfWeek: number, openTime: string, closeTime: string, isClosed: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  try {
+    const existing = await db.select().from(operatingHours).where(eq(operatingHours.dayOfWeek, dayOfWeek));
+    if (existing.length > 0) {
+      await db.update(operatingHours).set({ openTime, closeTime, isClosed }).where(eq(operatingHours.dayOfWeek, dayOfWeek));
+    } else {
+      await db.insert(operatingHours).values({ dayOfWeek, openTime, closeTime, isClosed });
+    }
+  } catch (error) {
+    console.error("[Database] Failed to update operating hours:", error);
+    throw error;
+  }
+}
